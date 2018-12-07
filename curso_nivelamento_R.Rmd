@@ -1,0 +1,204 @@
+---
+title: "analise-despesas-uniao"
+author: "tiago"
+date: "7 de dezembro de 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Análise de despesas da União
+
+Roteiro:
+
+* Introdução ao `tidyverse`;
+* Revisão de alguns tipos de dados e estruturas de dados do R;
+* Desenvolvimento da análise:
+  * Obter os dados do Tesouro Transparente;
+  * Tratar os dados -- `dplyr`, `tidyr`, `stringr`
+  * Visualizar os dados -- introdução ao `ggplot2`
+  * Obter dados de inflação com o ipeaData;
+  * 
+
+Roteiro detalhado:
+
+1. Criar novo arquivo RMarkdown e salvá-lo em uma pasta qualquer. A partir de então, não precisa mais se preocupar com o "working directory".
+
+2. Carregar os pacotes / libraries.
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(ipeaData)
+library(extrafont)
+library(gganimate)
+library(RColorBrewer)
+library(ckanr)
+library(zoo)
+library(janitor)
+library(kableExtra)
+```
+
+3. Carregar os dados a partir do Tesouro Transparente
+
+```{r}
+recurso_TT <- resource_show(id="1043f379-e7fb-4c18-be52-345b8672ccfb",
+                            url="http://www.tesourotransparente.gov.br/ckan")
+download.file(recurso_TT$url, destfile = "./despUniao.csv", mode = 'wb' )
+tabela <- read.csv2("despUniao.csv")
+```
+
+4. Dando uma olhada na estrutura dos dados
+
+```{r}
+str(tabela)
+
+glimpse(tabela)
+
+head(tabela)
+
+View(tabela)
+```
+
+5. Primeiras explorações
+
+```{r}
+dados <- tabela
+
+dados %>%
+  filter(Ano == 2008)
+```
+
+```{r}
+dados %>%
+  filter(Ano == 2008) %>%
+  group_by(Funcao_cod) %>%
+  summarise(Despesa_2008 = sum(Valor)) %>%
+  #adorn_totals("row") %>%
+  kable("html", col.names = c("Função", "Despesa Paga em 2008"), 
+        format.args = list(big.mark=".", decimal.mark=",")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+```
+
+```{r}
+dados %>%
+  group_by(Funcao_cod, Ano) %>%
+  summarise(Totais = sum(Valor))
+```
+
+```{r}
+dados %>%
+  group_by(Funcao_cod, Ano) %>%
+  summarise(Totais = sum(Valor)) %>%
+  spread(key = "Ano", value = "Totais")
+```
+
+```{r}
+dados %>%
+  group_by(Funcao_cod, Ano) %>%
+  summarise(Totais = sum(Valor)) %>%
+  spread(key = "Ano", value = "Totais") %>%
+  adorn_totals("row") %>%
+  adorn_percentages("col")
+```
+
+```{r}
+desp_2018_funcao <- dados %>%
+  filter(Ano == 2018) %>%
+  group_by(Funcao_cod) %>%
+  summarise(Despesa_2018 = sum(Valor))
+
+desp_2018_funcao
+```
+
+```{r}
+ggplot(desp_2018_funcao)
+```
+
+```{r}
+ggplot(desp_2018_funcao, aes(x = Funcao_cod))
+```
+
+
+
+5. Primeiras visualizações
+
+
+```{r}
+ggplot(tabela)
+```
+
+
+
+```{r}
+ggplot(tabela, aes(x = Periodo, y = Valor))
+```
+
+```{r}
+ggplot(tabela, aes(x = as.Date(Periodo), y = Valor))
+```
+
+
+```{r indice-inflacao}
+precos <- ipeaData::ipeadata("PRECOS12_IPCAG12") %>%
+  select(VALDATA, VALVALOR) %>%
+  filter(VALDATA > "2008-01-01")
+
+indice <- 1
+ultimo_indice <- 1
+
+for (preco in rev(precos$VALVALOR)) {
+  ultimo_indice <- ultimo_indice * (1 + preco/100)
+  indice <- c(ultimo_indice, indice)
+}
+
+precos$indice <- indice[-1]
+```
+
+```{r funcao-gera-indice}
+gera_indice <- function(data_ref_indice, data_inicio_serie){
+  precos <- ipeaData::ipeadata("PRECOS12_IPCAG12") %>%
+    select(VALDATA, VALVALOR) %>%
+    mutate(VALDATA = as.Date(VALDATA)) %>%
+    filter(VALDATA > data_inicio_serie & VALDATA <= data_ref_indice )
+  
+  indice <- 1
+  ultimo_indice <- 1
+  
+  for (preco in rev(precos$VALVALOR)) {
+    ultimo_indice <- ultimo_indice * (1 + preco/100)
+    indice <- c(ultimo_indice, indice)
+  }
+  
+  precos$indice <- indice[-1]  
+  return(precos)
+}
+
+indice_setembro <- gera_indice("2018-09-01", "2009-01-01")
+```
+
+
+
+
+```{r cars}
+library(tidyverse)
+library(readxl)
+library(ipeaData)
+library(extrafont)
+library(gganimate)
+library(RColorBrewer)
+library(ckanr)
+library(zoo)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
